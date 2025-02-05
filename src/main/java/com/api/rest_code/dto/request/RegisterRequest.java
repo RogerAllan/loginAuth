@@ -1,15 +1,11 @@
 package com.api.rest_code.dto.request;
-
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Email;
 
-import javax.management.relation.Role;
 
 public record RegisterRequest(
-        @NotBlank String getFirstname,
-        @NotBlank String getLastname,
-        @Email @NotBlank String getEmail,
-        @NotBlank String getPassword,
-        Role role
-) {
-}
+        @NotBlank String firstname, // Fixed field name
+        @NotBlank String lastname,  // Fixed field name
+        @Email @NotBlank String email, // Fixed field name
+        @NotBlank String password   // Fixed field name
+) {}

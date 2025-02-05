@@ -1,6 +1,7 @@
 package com.api.rest_code.config;
 
 import com.api.rest_code.service.JwtService;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,44 +22,52 @@ import java.io.IOException;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-    private final UserDetailsService userDetailService; // Injected via @RequiredArgsConstructor
+    private final UserDetailsService userDetailService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        // Ignora endpoints públicos (ex: autenticação)
+        // Skip authentication for public endpoints
         if (request.getServletPath().contains("/api/v1/auth")) {
             filterChain.doFilter(request, response);
             return;
         }
+
         final String authHeader = request.getHeader("Authorization");
         final String jwt;
         final String userEmail;
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response);
+            sendUnauthorizedError(response, "Missing or invalid Authorization header");
             return;
         }
-        jwt = authHeader.substring(7);
-        userEmail = jwtService.extractUsername(jwt); // Ensure JwtService has extractUsername method
 
-        // Proceed only if userEmail is extracted and no existing authentication
-        if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+        jwt = authHeader.substring(7);
+        userEmail = jwtService.extractUsername(jwt);
+
+        if (userEmail == null) {
+            sendUnauthorizedError(response, "Invalid token: No user email");
+            return;
+        }
+
+        if (SecurityContextHolder.getContext().getAuthentication() == null) {
             UserDetails userDetails = this.userDetailService.loadUserByUsername(userEmail);
 
-            if (jwtService.isTokenValid(jwt, userDetails)) {
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities() // Correctly retrieve authorities
-                );
-                authToken.setDetails(
-                        new WebAuthenticationDetailsSource().buildDetails(request)
-                );
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+            try {
+                jwtService.isTokenValid(jwt, userDetails);
+            } catch (JwtException e) {
+                sendUnauthorizedError(response, "Invalid token: " + e.getMessage());
+                return;
             }
         }
+
         filterChain.doFilter(request, response);
+    }
+
+    private void sendUnauthorizedError(HttpServletResponse response, String message) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json");
+        response.getWriter().write("{ \"error\": \"" + message + "\" }");
     }
 }
