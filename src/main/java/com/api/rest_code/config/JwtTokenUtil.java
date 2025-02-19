@@ -3,36 +3,32 @@ package com.api.rest_code.config;
 import java.io.Serializable;
 
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.Function;
+
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 
-import java.io.Serializable;
+import javax.crypto.SecretKey;
 
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.Function;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.stereotype.Component;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 
 @Component
 public class JwtTokenUtil implements Serializable {
     private static final long serialVersionUID = -2550185165626007488L;
     public static final long JWT_TOKEN_VALIDITY = 5 * 60 * 60;
 
-    @Value("${jwt.secret}")
+    @Value("jwt.secret")
     private String secret;
+
+    private SecretKey getSigningKey() {
+        byte[] keyBytes = Decoders.BASE64.decode(secret);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+
 
     //retorna o username do token jwt
     public String getUsernameFromToken(String token) {
@@ -54,7 +50,7 @@ public class JwtTokenUtil implements Serializable {
     private Claims getAllClaimsFromToken(String token) {
         return Jwts
                 .parser()
-                .setSigningKey(secret)
+                .verifyWith (getSigningKey())
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
@@ -68,16 +64,14 @@ public class JwtTokenUtil implements Serializable {
 
     //gera token para user
     public String generateToken(UserDetails userDetails) {
-        Map<String, Object> claims = new HashMap<>();
-        return doGenerateToken(claims, userDetails.getUsername());
+        return Jwts.builder ()
+                .subject (userDetails.getUsername ())
+                .issuedAt (new Date (System.currentTimeMillis ()))
+                .expiration (new Date (System.currentTimeMillis () + JWT_TOKEN_VALIDITY * 1000))
+                .signWith (getSigningKey ())
+                .compact();
     }
 
-    //Cria o token e devine tempo de expiração pra ele
-    private String doGenerateToken(Map<String, Object> claims, String subject) {
-        return Jwts.builder().setClaims(claims).setSubject(subject).setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + JWT_TOKEN_VALIDITY * 1000))
-                .signWith(SignatureAlgorithm.HS512, secret).compact();
-    }
 
     //valida o token
     public Boolean validateToken(String token, UserDetails userDetails) {
